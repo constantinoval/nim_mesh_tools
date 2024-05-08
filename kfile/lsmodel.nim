@@ -4,9 +4,12 @@ import feelement
 export tables
 import std/[os, memfiles, sugar, times, threadpool]
 import utils
+import std/streams
+import std/intsets
+
 
 type
-    LSmodel* = object ## LSmodel object represents the FE model from lsdyna k-file
+    LSmodel* = ref object ## LSmodel object represents the FE model from lsdyna k-file
         nodes*: OrderedTable[int, FEnode]
         solids*: OrderedTable[int, FEelement]
         solidsortho*: OrderedTable[int, FEelement]
@@ -122,7 +125,7 @@ proc parseSolidsOrtho(solidsOrthoTable: ref OrderedTable[int, FEelement]) {.thre
 
 proc readMesh*(ls: var LSModel, meshPath: string) =
     if fileExists(meshPath):
-        let tm = cpuTime()
+        # let tm = cpuTime()
         nodesChannel.open
         shellsChannel.open
         solidsChannel.open
@@ -141,7 +144,7 @@ proc readMesh*(ls: var LSModel, meshPath: string) =
         new(solidsTable)
         new(solidsOrthoTable)
         new(shellsTable)
-        echo "Чтение сетки из файла " & meshPath
+        # echo "Чтение сетки из файла " & meshPath
         nodesParseThread.createThread(parseNodes, nodesTable)
         solidsParseThread.createThread(parseSolids, solidsTable)
         solidsOrthoParseThread.createThread(parseSolidsOrtho, solidsOrthoTable)
@@ -150,7 +153,7 @@ proc readMesh*(ls: var LSModel, meshPath: string) =
         nodesParseThread.joinThread()
         fileReadThread.joinThread()
         joinThreads(solidsParseThread, solidsOrthoParseThread, shellsParseThread)
-        echo "Модель прочитана за " & $(cpuTime()-tm) & " сек..."
+        # echo "Модель прочитана за " & $(cpuTime()-tm) & " сек..."
         ls.nodes = nodesTable[]
         ls.solids = solidsTable[]
         ls.solidsortho = solidsOrthoTable[]
@@ -196,7 +199,7 @@ func elementVolume*(model: LSmodel, elNum: int): float =
     result = -1
     if elNum in model.solids:
         let el = model.solids[elNum]
-        var idxs: seq[array[1..4, int]]
+        var idxs: seq[array[1..4, uint8]]
         case el.nodes_count:
             of 4:
                 idxs = @[[1, 2, 3, 4]]
@@ -247,6 +250,158 @@ proc calculateElementVolumesParallel*(model: LSmodel, num_threads: int = 4) =
         spawn procOnePeace(element_refs[p.start].addr, p.length, model.addr)
     sync()
 
+proc save*(self: LSmodel, file_path: string) = 
+    let f = newFileStream(file_path, fmWrite)
+    if not isNil(f):
+        f.writeLine("*KEYWORD")
+        if self.nodes.len != 0:
+            f.writeLine("*NODE")
+            for n in self.nodes.values:
+                f.writeLine(n.formattedLine)
+        if self.solids.len != 0:
+            f.writeLine("*ELEMENT_SOLID")
+            for e in self.solids.values:
+                f.writeLine(e.formattedLine)
+        if self.solids_ortho.len != 0:
+            f.writeLine("*ELEMENT_SOLID_ORTHO")
+            for e in self.solids.values:
+                f.writeLine(e.formattedLine)
+        f.writeLine("*END")
+        f.close()
+
+proc translate*(model: var LSmodel, dx: float = 0, dy: float = 0, dz: float = 0) =
+    for nd in model.nodes.mvalues:
+        nd.x += dx
+        nd.y += dy
+        nd.z += dz
+
+proc reflect*(model: var LSmodel, norm: int = 0, tol: float = 1e-6) =
+    #[
+        norm == 0 - reflect about YZ plane,
+        norm == 1 - reflect about XZ plane,
+        norm == 2 - reflect about XY plane
+    ]#
+    # echo "Reflecting model..."
+    if not norm in [0, 1, 2]:
+        return
+    var nshift: int = -1
+    var eshift: int = -1
+    for num in model.nodes.keys:
+        nshift = max(num, nshift)
+    for num in model.solids.keys:
+        eshift = max(num, eshift)
+    let old_nodes = collect:
+        for num in model.nodes.keys:
+            num
+    for num in old_nodes:
+        var node = model.nodes[num]
+        var crds = [node.x, node.y, node.z]
+        if abs(crds[norm])<tol:
+            continue
+        crds[norm] = -crds[norm]
+        let new_node = FEnode(
+            n: node.n+nshift,
+            x: crds[0],
+            y: crds[1],
+            z: crds[2]
+            )
+        model.nodes[new_node.n] = new_node
+    let old_elements = collect:
+        for num in model.solids.keys:
+            num
+    for num in old_elements:
+        let el = model.solids[num]
+        var nodes = model.solids[num].nds
+        for i, v in nodes.pairs:
+            let n = model.nodes[v]
+            let crd: float = case norm:
+                of 0: n.x
+                of 1: n.y
+                of 2: n.z
+                else: 0
+            if abs(crd)>tol:
+                nodes[i] += nshift
+        let new_nodes: array[1..8, int] = case el.nodes_count:
+            of 4: [nodes[3], nodes[2], nodes[1], nodes[4], 0, 0, 0, 0]
+            of 6: [nodes[4], nodes[3], nodes[2], nodes[1], nodes[6], nodes[5], 0, 0]
+            of 8: [nodes[4], nodes[3], nodes[2], nodes[1], nodes[8], nodes[7], nodes[6], nodes[5]]
+            else: [0, 0, 0, 0, 0, 0, 0, 0]
+        let new_element = FEelement(
+            n: el.n+eshift,
+            nodes_count: el.nodes_count,
+            part: el.part,
+            nds: new_nodes,
+            volume: el.volume,
+        )
+        model.solids[num+eshift] = new_element
+    # echo "done..."
+
+proc renumber_solids*(model: LSmodel) =
+    var i = 0
+    let new_solids = collect(OrderedTable):
+        for s in model.solids.mvalues:
+            i += 1
+            s.n = i
+            {i: s}
+    model.solids = new_solids
+
+proc renumber_solidsortho*(model: LSmodel) =
+    var i = 0
+    let new_solidsortho = collect(OrderedTable):
+        for s in model.solidsortho.mvalues:
+            i += 1
+            s.n = i
+            {i: s}
+    model.solidsortho = new_solidsortho
+
+proc renumber_shells*(model: LSmodel) =
+    var i = 0
+    let new_shells = collect(OrderedTable):
+        for s in model.shells.mvalues:
+            i += 1
+            s.n = i
+            {i: s}
+    model.shells = new_shells
+
+proc renumber_nodes*(model: LSmodel) =
+    var i = 0 
+    let old_nodes_numbers = collect(newTable):
+        for n in model.nodes.keys:
+            i += 1
+            {n: i}
+    i = 0
+    let new_nodes = collect(OrderedTable):
+        for n in model.nodes.mvalues:
+            i += 1
+            n.n = i
+            {i: n}
+    model.nodes = new_nodes
+    for s in model.solids.mvalues:
+        for i in 1..s.nodes_count:
+            s.nds[i] = old_nodes_numbers[s.nds[i]]
+    for s in model.solidsortho.mvalues:
+        for i in 1..s.nodes_count:
+            s.nds[i] = old_nodes_numbers[s.nds[i]]
+    for s in model.shells.mvalues:
+        for i in 1..s.nodes_count:
+            s.nds[i] = old_nodes_numbers[s.nds[i]]
+
+proc delete_unreferenced_nodes*(model: LSmodel): int {.discardable.} = 
+    var all_attached_nodes: IntSet
+    for s in model.solids.values:
+        all_attached_nodes.incl(s.nodes.toIntSet)
+    for s in model.solidsortho.values:
+        all_attached_nodes.incl(s.nodes.toIntSet)
+    for s in model.shells.values:
+        all_attached_nodes.incl(s.nodes.toIntSet)
+    let nodes_to_delete = collect:
+        for n in model.nodes.keys:
+            if not all_attached_nodes.contains(n):
+                n
+    for n in nodes_to_delete:
+        model.nodes.del(n)
+    return nodes_to_delete.len
+
 
 when isMainModule:
     var ls = LSmodel()
@@ -261,17 +416,29 @@ when isMainModule:
     # ls.nodes[8] = FEnode(x: 0, y: 1, z: 1, n: 8)
     # var tm = getTime()
     # tm = getTime()
-    ls.readMesh("./small_model.k")
+    echo "Reading..."
+    ls.readMesh("./big_model.k")
     echo "Расчет объемов элементов"
     ls.calculateElementVolumesParallel()
     for i in 1..10:
         echo ls.solids[i].volume
-    # echo getTime()-tm
-    # tm = getTime()
-    ls.calculateElementVolumes()
-    echo "-----"
-    for i in 1..10:
-        echo ls.solids[i].volume
-    # echo getTime()-tm
-
-    echo "Готово..."
+    echo "Removing unreferenced nodes..."
+    echo "unref nodes count: ", ls.delete_unreferenced_nodes()
+    # # echo getTime()-tm
+    # # tm = getTime()
+    # ls.calculateElementVolumes()
+    # echo "-----"
+    # for i in 1..10:
+    #     echo ls.solids[i].volume
+    # # echo getTime()-tm
+    # echo "Готово..."
+    echo "Renumbering solids..."
+    ls.renumber_solids()
+    echo "Renumbering nodes..."
+    ls.renumber_nodes()
+    echo ls.solids[1]
+    echo "Reflecting..."
+    ls.reflect(norm=0)
+    echo "Writting..."
+    ls.save("1.k")
+    echo "Done..."

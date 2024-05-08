@@ -33,7 +33,7 @@ proc init(q: Quaternion) =
         q.data[i+1]=crds[i]*sina2
     q.calculateRotationMatrix()
 
-proc rotatePoint*(q: Quaternion, p: Point): Point =
+proc rotatedPoint*(q: Quaternion, p: Point): Point =
     if not q.initialised:
         q.init
     var rez = @[0.0, 0.0, 0.0]
@@ -45,7 +45,20 @@ proc rotatePoint*(q: Quaternion, p: Point): Point =
     result.fromSeq(rez)
     return result
 
+proc rotatePoint*(q: Quaternion, p: var Point) =
+    if not q.initialised:
+        q.init
+    var rez: array[3, float] = [0.0, 0.0, 0.0]
+    for i in 0..2:
+        for j in 0..2:
+            rez[i] += q.R[i][j]*p.coords[j]
+    p.x = rez[0]
+    p.y = rez[1]
+    p.z = rez[2]
+
+
 when isMainModule:
     let q = Quaternion(angle: 45, axis: Point(x: 0, y: 0, z: 1))
-    let p = q.rotatePoint(Point(x: 1, y:0, z: 0))
+    var p: Point = Point(x: 1, y:0, z: 0)
+    q.rotatePoint(p)
     echo(p, p.len)

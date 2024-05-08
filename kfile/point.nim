@@ -3,7 +3,7 @@ import utils
 
 # Point object
 type
-    Point* = object of RootObj
+    Point* = ref object of RootObj
         x*, y*, z*: float
 
 # addition of point        
@@ -95,6 +95,7 @@ proc volume4points*(points: openArray[Point]): float =
 when isMainModule:
     var p1 = Point(x: 1, y: 0, z: 0)
     var p2 = Point(x: -1, y: 1, z: 0)
+    echo $(p1+p2)
     echo($(p1*7))
     echo(p1.dot(p2))
     echo(-p1, p1.len)

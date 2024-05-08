@@ -1,5 +1,7 @@
 import fenode
 import parseutils
+import std/[strformat, strutils]
+import std/sequtils
 
 const
     HexFacesIdxs = [
@@ -30,7 +32,7 @@ type
         Solid
         Shell
         Solid_ortho
-    FEelement* = object
+    FEelement* = ref object
         n*: int
         nodes_count*: int
         part*: int 
@@ -52,12 +54,9 @@ proc `$`*(e: FEelement): string =
         result &= "\nMaterial vector: a=" & $e.a & " d=" & $e.d
 
 proc normalize_nodes*(self: var FEelement) =
-    var nodesToRemoveCount = 0
-    for i in 4..self.nodes_count:
-        if self.nds[i] in self.nds[3..i-1]:
-            self.nds[i] = 0
-            inc(nodesToRemoveCount)
-    dec(self.nodes_count, nodesToRemoveCount)
+    let uniq_nodes = deduplicate(self.nds)
+    self.nodes_count = uniq_nodes.len
+    self.nds[1..self.nodes_count] = uniq_nodes
 
 proc fromStringFast*(l: string, etype = Etype.Solid): FEelement =
     result = FEelement(etype: etype)
@@ -81,26 +80,50 @@ proc fromStringFast*(l: string, etype = Etype.Solid): FEelement =
 proc fromStringFastOrtho*(l: array[3, string]): FEelement =
     result = fromStringFast(l[0], Etype.Solid_ortho)
     var i: int
-    i += l[1].skipUntil({'0'..'9'}, i)
+    i += l[1].skipUntil({'0'..'9', '-'}, i)
     i += l[1].parseFloat(result.a[1], i)   
-    i += l[1].skipUntil({'0'..'9'}, i)
+    i += l[1].skipUntil({'0'..'9', '-'}, i)
     i += l[1].parseFloat(result.a[2], i)   
-    i += l[1].skipUntil({'0'..'9'}, i)
+    i += l[1].skipUntil({'0'..'9', '-'}, i)
     i += l[1].parseFloat(result.a[3], i)   
     i = 0
-    i += l[2].skipUntil({'0'..'9'}, i)
+    i += l[2].skipUntil({'0'..'9', '-'}, i)
     i += l[2].parseFloat(result.d[1], i)   
-    i += l[2].skipUntil({'0'..'9'}, i)
+    i += l[2].skipUntil({'0'..'9', '-'}, i)
     i += l[2].parseFloat(result.d[2], i)   
-    i += l[2].skipUntil({'0'..'9'}, i)
+    i += l[2].skipUntil({'0'..'9', '-'}, i)
     i += l[2].parseFloat(result.d[3], i) 
 
+proc formattedLine*(self: FEelement): string =
+    result = ($self.n).align(8) & ($self.part).align(8)
+    case self.nodes_count:
+        of 8:
+            for n in self.nodes:
+                result &= ($n).align(8)
+        of 4:
+            for n in self.nodes:
+                result &= ($n).align(8)
+            let n = ($self.nodes[^1]).align(8)
+            for i in 1..4:
+                result &= n
+        of 6:
+            for n in self.nodes[0..3]:
+                result &= ($n).align(8)
+            let s1 = ($self.nodes[^2]).align(8)
+            result &= s1 & s1
+            let s2 = ($self.nodes[^1]).align(8)
+            result &= s2 & s2
+        else:
+            discard
+    if self.etype == Solid_ortho:
+        result &= "\n" & formatFloat(self.a[1], ffScientific, 7).align(18) &
+                         formatFloat(self.a[2], ffScientific, 7).align(18) &
+                         formatFloat(self.a[3], ffScientific, 7).align(18) 
+        result &= "\n" & formatFloat(self.d[1], ffScientific, 7).align(18) &
+                         formatFloat(self.d[2], ffScientific, 7).align(18) &
+                         formatFloat(self.d[3], ffScientific, 7).align(18) 
 
 when isMainModule:
-    var el = FEelement(nds: [1, 2, 3, 4, 4, 4, 4, 4], nodes_count: 8)
-    echo el
-    echo el.nodes_count
-    el.normalize_nodes
-    echo el
-    echo el.nodes_count
+    var el = fromStringFast("2067, 4, 1535, 1517, 1482, 1500, 1513, 1513, 1478, 1478")
+    echo el.formattedLine
 

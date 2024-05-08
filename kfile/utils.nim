@@ -40,12 +40,6 @@ proc splitSeq*(length: int, num: int): seq[PeaceToProceed] =
                     break fill
 
 when isMainModule:
-    var
-        p1, p2, p3, p4: Point
-    p1.fromSeq([0.0, 0.0, 0.0])
-    p2.fromSeq([1.0, 0.0, 0.0])
-    p3.fromSeq([0.0, 1.0, 0.0])
-    p4.fromSeq([0.0, 0.0, -1.0])
-    echo volume4points(@[p1, p2, p3, p4])
-    const TetraFacesIndexes = [[1, 2, 3], [2, 3, 4]]
-    echo TetraFacesIndexes
+  echo splitSeq(10, 3)
+  let a = 1
+  echo a
