@@ -19,18 +19,19 @@ type
 
 proc splitSeq*(length: int, num: int): seq[PeaceToProceed] = 
     var num = min(num, length)
+    var count = length
     if num < 2:
         result = @[(start: 0, length: length)]
         return
-    var
-        stride = length div num
-        extra = length mod num
-        count = length
+    # var
+    #     stride = length div num
+    #     extra = length mod num
+    #     count = length
     result = newSeqOfCap[PeaceToProceed](num)
-    if extra > 0:
-        inc(stride)
+    # if extra > 0:
+    #     inc(stride)
     for i in 0 ..< num:
-        result.add((start: i*stride, length: 0))
+        result.add((start: 0, length: 0))
     block fill:
         while true:
             for i in 0 ..< num:
@@ -38,8 +39,11 @@ proc splitSeq*(length: int, num: int): seq[PeaceToProceed] =
                 dec(count)
                 if count == 0:
                     break fill
+    for i in 1 ..< num:
+        for j in 0 ..< i:
+            result[i].start += result[j].length
 
 when isMainModule:
-  echo splitSeq(10, 3)
+  echo splitSeq(10, 4)
   let a = 1
   echo a

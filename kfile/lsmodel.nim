@@ -11,13 +11,14 @@ import std/intsets
 
 
 type
+    Bbox* = tuple[minx: float, miny: float, minz: float, maxx: float, maxy: float, maxz: float]
     LSmodel* = ref object ## LSmodel object represents the FE model from lsdyna k-file
         nodes*: OrderedTable[int, FEnode]
         solids*: OrderedTable[int, FEelement]
         solidsortho*: OrderedTable[int, FEelement]
         shells*: OrderedTable[int, FEelement]
         TOL*:float = 1e-6
-        bbox*: tuple[minx: float, miny: float, minz: float, maxx: float, maxy: float, maxz: float]
+        bbox*: Bbox
     KeywordBlock = enum
         Node
         Solid
@@ -462,7 +463,7 @@ proc delete_unreferenced_nodes*(model: LSmodel): int {.discardable.} =
         model.nodes.del(n)
     return nodes_to_delete.len
 
-proc nearest_node*(model: LSmodel, node_number: int, node_group: openArray[int]): int =
+proc nearest_node*(model: LSmodel, node_number: int, node_group: IntSet): int =
     ##[
         Find nearest to node_number node from set of node numbers: node_group
     ]##
