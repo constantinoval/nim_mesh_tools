@@ -38,9 +38,13 @@ proc volume4nodes*(nodes: openArray[FEnode]): float =
     matrix[3] = (nodes[3]-nodes[0]).coords
     result = abs(matrix.determinant/6.0)
 
+proc dist*(n1: FEnode, n2: FEnode): float =
+    return (n1-n2).len
+
 when isMainModule:
-    # let n1 = FEnode(x: 0, y: 0, z: 0)
-    # let n2 = FEnode(x: 1, y: 0, z: 0)
+    let n1 = FEnode(x: 0, y: 0, z: 0)
+    let n2 = FEnode(x: 1, y: 0, z: 0)
+    echo n1.dist(n2)
     # let n3 = FEnode(x: 0, y: 1, z: 0)
     # let n4 = FEnode(x: 0, y: 0, z: 1)
     # echo volume4nodes(@[n1, n2, n3, n4])

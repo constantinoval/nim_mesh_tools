@@ -1,6 +1,8 @@
 import std/tables
 import fenode
 import feelement
+import point
+import quaternion
 export tables
 import std/[os, memfiles, sugar, times, threadpool]
 import utils
@@ -186,7 +188,32 @@ func planeXmin*(model: LSmodel): seq[int] =
         if abs(nd.x-model.bbox.minx)<model.TOL:
             result.add(n)
 
-proc modelInfo(model: LSmodel): string =
+func planeXmax*(model: LSmodel): seq[int] =
+    for n, nd in model.nodes.pairs():
+        if abs(nd.x-model.bbox.maxx)<model.TOL:
+            result.add(n)
+
+func planeYmin*(model: LSmodel): seq[int] =
+    for n, nd in model.nodes.pairs():
+        if abs(nd.y-model.bbox.miny)<model.TOL:
+            result.add(n)
+
+func planeYmax*(model: LSmodel): seq[int] =
+    for n, nd in model.nodes.pairs():
+        if abs(nd.y-model.bbox.maxy)<model.TOL:
+            result.add(n)
+
+func planeZmin*(model: LSmodel): seq[int] =
+    for n, nd in model.nodes.pairs():
+        if abs(nd.z-model.bbox.minz)<model.TOL:
+            result.add(n)
+
+func planeZmax*(model: LSmodel): seq[int] =
+    for n, nd in model.nodes.pairs():
+        if abs(nd.z-model.bbox.maxz)<model.TOL:
+            result.add(n)
+
+proc modelInfo*(model: LSmodel): string =
     result &= "\nИнформация о модели:\nЧисло узлов: " & $(model.nodes.len) & "\n"
     result &= "Число оболочечных элементов: " & $(model.shells.len) & "\n"
     result &= "Число объемных элементов: " & $(model.solids.len) & "\n"
@@ -251,6 +278,10 @@ proc calculateElementVolumesParallel*(model: LSmodel, num_threads: int = 4) =
     sync()
 
 proc save*(self: LSmodel, file_path: string) = 
+    ##[
+        save model to file file_path
+        example: model.save("1.k")
+    ]##
     let f = newFileStream(file_path, fmWrite)
     if not isNil(f):
         f.writeLine("*KEYWORD")
@@ -270,17 +301,31 @@ proc save*(self: LSmodel, file_path: string) =
         f.close()
 
 proc translate*(model: var LSmodel, dx: float = 0, dy: float = 0, dz: float = 0) =
+    ##[
+        translate model by dx, dy, dz
+        example: model.translate(dx=10)
+    ]##
     for nd in model.nodes.mvalues:
         nd.x += dx
         nd.y += dy
         nd.z += dz
 
+proc rotate*(model: var LSmodel, axis: Point, angle: float) = 
+    ##[
+        rotate model by angle obout axis(deg)
+        example: model.rotate(axis=Point(x: 0, y: 0, z: 0), angle=90)
+    ]##
+    let q = Quaternion(angle: angle, axis: axis)
+    for nd in model.nodes.mvalues:
+        q.rotateNode(nd)
+
+
 proc reflect*(model: var LSmodel, norm: int = 0, tol: float = 1e-6) =
-    #[
+    ##[
         norm == 0 - reflect about YZ plane,
         norm == 1 - reflect about XZ plane,
         norm == 2 - reflect about XY plane
-    ]#
+    ]##
     # echo "Reflecting model..."
     if not norm in [0, 1, 2]:
         return
@@ -337,6 +382,9 @@ proc reflect*(model: var LSmodel, norm: int = 0, tol: float = 1e-6) =
     # echo "done..."
 
 proc renumber_solids*(model: LSmodel) =
+    ##[
+        renumber solids 1..solids_count
+    ]##
     var i = 0
     let new_solids = collect(OrderedTable):
         for s in model.solids.mvalues:
@@ -346,6 +394,9 @@ proc renumber_solids*(model: LSmodel) =
     model.solids = new_solids
 
 proc renumber_solidsortho*(model: LSmodel) =
+    ##[
+        renumber solidsortho 1..solidsortho_count
+    ]##
     var i = 0
     let new_solidsortho = collect(OrderedTable):
         for s in model.solidsortho.mvalues:
@@ -355,6 +406,9 @@ proc renumber_solidsortho*(model: LSmodel) =
     model.solidsortho = new_solidsortho
 
 proc renumber_shells*(model: LSmodel) =
+    ##[
+        renumber shells 1..shells_count
+    ]##
     var i = 0
     let new_shells = collect(OrderedTable):
         for s in model.shells.mvalues:
@@ -364,6 +418,9 @@ proc renumber_shells*(model: LSmodel) =
     model.shells = new_shells
 
 proc renumber_nodes*(model: LSmodel) =
+    ##[
+        renumber nodes 1..nodes_count
+    ]##
     var i = 0 
     let old_nodes_numbers = collect(newTable):
         for n in model.nodes.keys:
@@ -386,7 +443,10 @@ proc renumber_nodes*(model: LSmodel) =
         for i in 1..s.nodes_count:
             s.nds[i] = old_nodes_numbers[s.nds[i]]
 
-proc delete_unreferenced_nodes*(model: LSmodel): int {.discardable.} = 
+proc delete_unreferenced_nodes*(model: LSmodel): int {.discardable.} =
+    ##[
+        delete from nodes all nodes which are not connected to any element
+    ]##
     var all_attached_nodes: IntSet
     for s in model.solids.values:
         all_attached_nodes.incl(s.nodes.toIntSet)
@@ -402,43 +462,27 @@ proc delete_unreferenced_nodes*(model: LSmodel): int {.discardable.} =
         model.nodes.del(n)
     return nodes_to_delete.len
 
+proc nearest_node*(model: LSmodel, node_number: int, node_group: openArray[int]): int =
+    ##[
+        Find nearest to node_number node from set of node numbers: node_group
+    ]##
+    if node_number notin model.nodes:
+        echo node_number, " not in model..."
+        return -1
+    let n0 = model.nodes[node_number]
+    var dist: float = float.high
+    for n in node_group:
+        if n in model.nodes:
+            let d = model.nodes[n].dist(n0)
+            if d<dist:
+                result = n
+                dist = d
+    return result
+
 
 when isMainModule:
     var ls = LSmodel()
-    # ls.solids[1] = FEelement(nds: [1, 2, 3, 4, 5, 6, 7, 8], nodes_count: 8, n: 1)
-    # ls.nodes[1] = FEnode(x: 0, y: 0, z: 0, n: 1)
-    # ls.nodes[2] = FEnode(x: 1, y: 0, z: 0, n: 2)
-    # ls.nodes[3] = FEnode(x: 1, y: 1, z: 0, n: 3)
-    # ls.nodes[4] = FEnode(x: 0, y: 1, z: 0, n: 4)
-    # ls.nodes[5] = FEnode(x: 0, y: 0, z: 1, n: 5)
-    # ls.nodes[6] = FEnode(x: 1, y: 0, z: 1, n: 6)
-    # ls.nodes[7] = FEnode(x: 1, y: 1, z: 1, n: 7)
-    # ls.nodes[8] = FEnode(x: 0, y: 1, z: 1, n: 8)
-    # var tm = getTime()
-    # tm = getTime()
-    echo "Reading..."
-    ls.readMesh("./big_model.k")
-    echo "Расчет объемов элементов"
-    ls.calculateElementVolumesParallel()
-    for i in 1..10:
-        echo ls.solids[i].volume
-    echo "Removing unreferenced nodes..."
-    echo "unref nodes count: ", ls.delete_unreferenced_nodes()
-    # # echo getTime()-tm
-    # # tm = getTime()
-    # ls.calculateElementVolumes()
-    # echo "-----"
-    # for i in 1..10:
-    #     echo ls.solids[i].volume
-    # # echo getTime()-tm
-    # echo "Готово..."
-    echo "Renumbering solids..."
-    ls.renumber_solids()
-    echo "Renumbering nodes..."
-    ls.renumber_nodes()
-    echo ls.solids[1]
-    echo "Reflecting..."
-    ls.reflect(norm=0)
-    echo "Writting..."
-    ls.save("1.k")
-    echo "Done..."
+    ls.nodes[1] = FEnode(n: 1, x: 1, y: 0, z: 0)
+    ls.rotate(axis=Point(x: 0, y: 0, z: 1), angle=90)
+    echo ls.nodes[1]
+    ls.rotate()

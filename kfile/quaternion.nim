@@ -1,4 +1,4 @@
-import point, math
+import point, math, fenode
 
 type
     Quaternion* = ref object
@@ -46,6 +46,17 @@ proc rotatedPoint*(q: Quaternion, p: Point): Point =
     return result
 
 proc rotatePoint*(q: Quaternion, p: var Point) =
+    if not q.initialised:
+        q.init
+    var rez: array[3, float] = [0.0, 0.0, 0.0]
+    for i in 0..2:
+        for j in 0..2:
+            rez[i] += q.R[i][j]*p.coords[j]
+    p.x = rez[0]
+    p.y = rez[1]
+    p.z = rez[2]
+
+proc rotateNode*(q: Quaternion, p: var FEnode) =
     if not q.initialised:
         q.init
     var rez: array[3, float] = [0.0, 0.0, 0.0]
