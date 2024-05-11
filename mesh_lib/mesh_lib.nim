@@ -1,28 +1,29 @@
 import ../kfile/lsmodel
 import std/[tables, sugar, intsets, sequtils, threadpool, monotimes]
+import nimpy
 
 const isparallel = true
 
 type
     Bbox* = tuple[minx: float, miny: float, minz: float, maxx: float, maxy: float, maxz: float]
-    Mesh* = ref object
+    Mesh* = ref object of PyNimObjectExperimental
         model: LSmodel = LSmodel()
         tol: float = 1e-6
     Mesh_bc_data = tuple[fixed: int, dx, dy, dz: float, pairs: Table[string, seq[array[2, int]]]]
 
-proc read*(self: Mesh, file_path: string) =
+proc read*(self: Mesh, file_path: string) {.exportpy.} =
     ##[
         Чтение сетки из файла
     ]##
     self.model.readMesh(file_path)
 
-proc save*(self: Mesh, file_path: string) =
+proc save*(self: Mesh, file_path: string) {.exportpy.} =
     ##[
         Сохранение сетки в файл
     ]##
     self.model.save(file_path)
 
-proc clear_and_renumber*(self: Mesh) =
+proc clear_and_renumber*(self: Mesh) {.exportpy.} =
     ##[
         Удаляются свободные узлы. Перенумеровываются узлы и элементы
     ]##
@@ -32,7 +33,7 @@ proc clear_and_renumber*(self: Mesh) =
     self.model.renumber_solids()
     self.model.renumber_solidsortho()
 
-proc proceed*(self: Mesh) =
+proc proceed*(self: Mesh) {.exportpy.} =
     ##[
         Определяются границы модели и расчитываются объемы конечных элементов
     ]##
@@ -40,13 +41,13 @@ proc proceed*(self: Mesh) =
     self.model.calculateElementVolumesParallel()
     self.model.TOL = self.tol
 
-func bbox*(self: Mesh): Bbox =
+func bbox*(self: Mesh): Bbox {.exportpy.} =
     ##[
         Границы сеточной модели: tuple[minx: float, miny: float, minz: float, maxx: float, maxy: float, maxz: float]
     ]##
     return self.model.bbox
 
-proc reflect*(self: Mesh, norm: int) =
+proc reflect*(self: Mesh, norm: int) {.exportpy.} =
     ##[
         Отражение модели:
             norm == 0 - относительно плоскости YZ,
@@ -55,13 +56,13 @@ proc reflect*(self: Mesh, norm: int) =
     ]##
     self.model.reflect(norm=norm, tol=self.tol)
 
-proc translate*(self: Mesh, dx: float=0, dy: float=0, dz: float=0) =
+proc translate*(self: Mesh, dx: float=0, dy: float=0, dz: float=0) {.exportpy} =
     ##[
         Смещение модели на dx, dy, dz
     ]##
     self.model.translate(dx=dx, dy=dy, dz=dz)
 
-proc pairs_for_periodic_bc*(self: Mesh): Mesh_bc_data =
+proc pairs_for_periodic_bc*(self: Mesh): Mesh_bc_data {.exportpy.} =
     ##[
         Поиск пар узлов для периодических граничных условий
     ]##
@@ -170,22 +171,26 @@ proc pairs_for_periodic_bc*(self: Mesh): Mesh_bc_data =
         [E.toSeq[0], C.toSeq[0]],
     ]
 
+proc info*(self: Mesh): string {.exportpy.} =
+    return self.model.modelInfo
+
 when isMainModule:
-    var m = new(Mesh)
-    echo "Reading..."
-    m.read("./big_test.k")
-    echo "Clearing and renumbering..."
-    m.clear_and_renumber()
-    echo "Calculating volumes..."
-    m.proceed()
-    # echo m.bbox
-    # echo m.model.modelInfo()
-    # m.reflect(0)
-    # echo m.model.modelInfo()
-    # echo m.model.solids[1].volume
-    # m.save("1.k")
-    let t0 = getMonoTime()
-    echo "Processing bcs..."
-    let rez = m.pairs_for_periodic_bc()
-    echo getMonoTime() - t0
-    echo "All done..."
+    # var m = new(Mesh)
+    # echo "Reading..."
+    # m.read("./big_test.k")
+    # echo "Clearing and renumbering..."
+    # m.clear_and_renumber()
+    # echo "Calculating volumes..."
+    # m.proceed()
+    # # echo m.bbox
+    # # echo m.model.modelInfo()
+    # # m.reflect(0)
+    # # echo m.model.modelInfo()
+    # # echo m.model.solids[1].volume
+    # # m.save("1.k")
+    # let t0 = getMonoTime()
+    # echo "Processing bcs..."
+    # let rez = m.pairs_for_periodic_bc()
+    # echo getMonoTime() - t0
+    # echo "All done..."
+    discard
