@@ -1,5 +1,5 @@
-*.k
-*/*.k
-*/*.so
-*/*.pyd
-*/*.exe
+ */*
+ !*/*.nim
+ !*/*.nims
+ !*/*.py
+ !.gitignore
