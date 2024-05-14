@@ -126,7 +126,7 @@ proc parseSolidsOrtho(solidsOrthoTable: ref OrderedTable[int, FEelement]) {.thre
             break
     # echo "Parsed ", count, " ortho solids..."
 
-proc readMesh*(ls: var LSModel, meshPath: string) =
+proc readMesh*(ls: var LSModel, meshPath: string): bool {.discardable.} =
     if fileExists(meshPath):
         # let tm = cpuTime()
         nodesChannel.open
@@ -165,16 +165,17 @@ proc readMesh*(ls: var LSModel, meshPath: string) =
         solidsChannel.close
         shellsChannel.close
         solidsOrthoChannel.close
+        result = true
 
     
 proc determinateBbox*(model: var LSmodel) = 
     var
-        minX: float = 1e9
-        maxX: float = -1e9
-        minY: float = 1e9
-        maxY: float = -1e9
-        minZ: float = 1e9
-        maxZ: float = -1e9
+        minX: float = float.high
+        maxX: float = float.low
+        minY: float = float.high
+        maxY: float = float.low
+        minZ: float = float.high
+        maxZ: float = float.low
     for nd in model.nodes.values():
         minX = min(minX, nd.x)
         maxX = max(maxX, nd.x)
@@ -321,13 +322,14 @@ proc rotate*(model: var LSmodel, axis: Point, angle: float) =
         q.rotateNode(nd)
 
 
-proc reflect*(model: var LSmodel, norm: int = 0, tol: float = 1e-6) =
+proc reflect*(model: var LSmodel, norm: int = 0) =
     ##[
         norm == 0 - reflect about YZ plane,
         norm == 1 - reflect about XZ plane,
         norm == 2 - reflect about XY plane
     ]##
     # echo "Reflecting model..."
+    let tol = model.TOL
     if not norm in [0, 1, 2]:
         return
     var nshift: int = -1
@@ -486,4 +488,3 @@ when isMainModule:
     ls.nodes[1] = FEnode(n: 1, x: 1, y: 0, z: 0)
     ls.rotate(axis=Point(x: 0, y: 0, z: 1), angle=90)
     echo ls.nodes[1]
-    ls.rotate()

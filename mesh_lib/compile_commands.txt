@@ -1,0 +1,4 @@
+# Compile on Windows:
+nim c --app:lib --out:mesh_lib.pyd --threads:on --tlsEmulation:off --passL:-static mesh_lib
+# Compile on everything else:
+nim c --app:lib --out:mesh_lib.so --threads:on mesh_lib

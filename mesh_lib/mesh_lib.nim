@@ -8,8 +8,10 @@ type
     Bbox* = tuple[minx: float, miny: float, minz: float, maxx: float, maxy: float, maxz: float]
     Mesh* = ref object of PyNimObjectExperimental
         model: LSmodel = LSmodel()
-        tol: float = 1e-6
     Mesh_bc_data = tuple[fixed: int, dx, dy, dz: float, pairs: Table[string, seq[array[2, int]]]]
+
+proc set_tol*(self: Mesh, tol: float = 1e-6) {.exportpy.} =
+    self.model.TOL = tol
 
 proc read*(self: Mesh, file_path: string) {.exportpy.} =
     ##[
@@ -17,29 +19,47 @@ proc read*(self: Mesh, file_path: string) {.exportpy.} =
     ]##
     self.model.readMesh(file_path)
 
+func nodescount*(self: Mesh): int {.exportpy.} =
+    return self.model.nodes.len
+
+func solidscount*(self: Mesh): int {.exportpy.} =
+    return self.model.solids.len
+
+func solidsorthocount*(self: Mesh): int {.exportpy.} =
+    return self.model.solidsortho.len
+
+func shellscount*(self: Mesh): int {.exportpy.} =
+    return self.model.shells.len
+
 proc save*(self: Mesh, file_path: string) {.exportpy.} =
     ##[
         Сохранение сетки в файл
     ]##
     self.model.save(file_path)
 
-proc clear_and_renumber*(self: Mesh) {.exportpy.} =
-    ##[
-        Удаляются свободные узлы. Перенумеровываются узлы и элементы
-    ]##
-    self.model.delete_unreferenced_nodes()
+proc delete_unreferenced_nodes*(self: Mesh): int {.exportpy discardable.} =
+    return self.model.delete_unreferenced_nodes()
+
+proc renumber_nodes*(self: Mesh) {.exportpy.} =
     self.model.renumber_nodes()
+
+proc renumber_shells*(self: Mesh) {.exportpy.} =
     self.model.renumber_shells()
+
+proc renumber_solids*(self: Mesh) {.exportpy.} =
     self.model.renumber_solids()
+
+proc renumber_solidsortho*(self: Mesh) {.exportpy.} =
     self.model.renumber_solidsortho()
 
-proc proceed*(self: Mesh) {.exportpy.} =
-    ##[
-        Определяются границы модели и расчитываются объемы конечных элементов
-    ]##
+proc determinate_bbox*(self: Mesh) {.exportpy.} =
     self.model.determinateBbox()
-    self.model.calculateElementVolumesParallel()
-    self.model.TOL = self.tol
+
+proc calculate_element_volumes*(self: Mesh, num_threads: int = 0) {.exportpy.} =
+    if num_threads<=1:
+        self.model.calculateElementVolumes()
+    elif num_threads>1:
+        self.model.calculateElementVolumesParallel(num_threads=num_threads)
 
 func bbox*(self: Mesh): Bbox {.exportpy.} =
     ##[
@@ -54,9 +74,9 @@ proc reflect*(self: Mesh, norm: int) {.exportpy.} =
             norm == 1 - относительно плоскости XZ,
             norm == 2 - относительно плоскости XY
     ]##
-    self.model.reflect(norm=norm, tol=self.tol)
+    self.model.reflect(norm=norm)
 
-proc translate*(self: Mesh, dx: float=0, dy: float=0, dz: float=0) {.exportpy} =
+proc translate*(self: Mesh, dx: float=0, dy: float=0, dz: float=0) {.exportpy.} =
     ##[
         Смещение модели на dx, dy, dz
     ]##
@@ -177,7 +197,8 @@ proc info*(self: Mesh): string {.exportpy.} =
 when isMainModule:
     # var m = new(Mesh)
     # echo "Reading..."
-    # m.read("./big_test.k")
+    # m.read("./111.k")
+    # echo m.nodescount
     # echo "Clearing and renumbering..."
     # m.clear_and_renumber()
     # echo "Calculating volumes..."

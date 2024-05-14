@@ -2,4 +2,6 @@
  !*/*.nim
  !*/*.nims
  !*/*.py
+ !*/*.pyi
+ !*/*.txt
  !.gitignore
