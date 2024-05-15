@@ -27,6 +27,10 @@ type
         Undefined
 
 var nodesChannel, shellsChannel, solidsChannel, solidsOrthoChannel:  Channel[string]
+nodesChannel.open
+shellsChannel.open
+solidsChannel.open
+solidsOrthoChannel.open
 
 proc readFile(filename: string) {.thread.} =
     # echo "File reader started..."
@@ -129,10 +133,6 @@ proc parseSolidsOrtho(solidsOrthoTable: ref OrderedTable[int, FEelement]) {.thre
 proc readMesh*(ls: var LSModel, meshPath: string): bool {.discardable.} =
     if fileExists(meshPath):
         # let tm = cpuTime()
-        nodesChannel.open
-        shellsChannel.open
-        solidsChannel.open
-        solidsOrthoChannel.open
         var
             fileReadThread: Thread[string]
             nodesParseThread: Thread[ref OrderedTable[int, FEnode]]
@@ -161,10 +161,10 @@ proc readMesh*(ls: var LSModel, meshPath: string): bool {.discardable.} =
         ls.solids = solidsTable[]
         ls.solidsortho = solidsOrthoTable[]
         ls.shells = shellsTable[]
-        nodesChannel.close
-        solidsChannel.close
-        shellsChannel.close
-        solidsOrthoChannel.close
+        # nodesChannel.close
+        # solidsChannel.close
+        # shellsChannel.close
+        # solidsOrthoChannel.close
         result = true
 
     
@@ -226,8 +226,12 @@ func elementVolume*(model: LSmodel, elNum: int): float =
         Определение объема элемента, заданного номером
     ]##
     result = -1
+    var el: FEelement
     if elNum in model.solids:
-        let el = model.solids[elNum]
+        el = model.solids[elNum]
+    if elNum in model.solidsortho:
+        el = model.solidsortho[elNum]
+    if not el.isNil:
         var idxs: seq[array[1..4, uint8]]
         case el.nodes_count:
             of 4:
@@ -261,14 +265,18 @@ proc calculateElementVolumes*(model: var LSmodel) =
     ]##
     for el in model.solids.keys():
         model.solids[el].volume = model.elementVolume(el)
+    for el in model.solidsortho.keys():
+        model.solidsortho[el].volume = model.elementVolume(el)
 
 proc calculateElementVolumesParallel*(model: LSmodel, num_threads: int = 4) =
     ##[
         Расчет объемов элементов модели в параллельном режиме
     ]##
-    let element_refs = collect:
-        for el in model.solids.values:
-            el.addr
+    var element_refs = newSeqOfCap[ptr FEelement](model.solids.len+model.solidsortho.len)
+    for el in model.solids.values:
+        element_refs.add(el.addr)
+    for el in model.solidsortho.values:
+        element_refs.add(el.addr)
     proc procOnePeace(start_addr: pointer, length: int, model: ptr LSmodel) =
         var data = cast[ptr UncheckedArray[ptr FEelement]](start_addr)
         for i in 0 ..< length:
@@ -384,11 +392,11 @@ proc reflect*(model: var LSmodel, norm: int = 0) =
         model.solids[num+eshift] = new_element
     # echo "done..."
 
-proc renumber_solids*(model: LSmodel) =
+proc renumber_solids*(model: LSmodel, start: int = 1) =
     ##[
         renumber solids 1..solids_count
     ]##
-    var i = 0
+    var i = start - 1
     let new_solids = collect(OrderedTable):
         for s in model.solids.mvalues:
             i += 1
@@ -396,11 +404,11 @@ proc renumber_solids*(model: LSmodel) =
             {i: s}
     model.solids = new_solids
 
-proc renumber_solidsortho*(model: LSmodel) =
+proc renumber_solidsortho*(model: LSmodel, start: int = 1) =
     ##[
         renumber solidsortho 1..solidsortho_count
     ]##
-    var i = 0
+    var i = start - 1
     let new_solidsortho = collect(OrderedTable):
         for s in model.solidsortho.mvalues:
             i += 1
@@ -408,11 +416,11 @@ proc renumber_solidsortho*(model: LSmodel) =
             {i: s}
     model.solidsortho = new_solidsortho
 
-proc renumber_shells*(model: LSmodel) =
+proc renumber_shells*(model: LSmodel, start: int = 1) =
     ##[
         renumber shells 1..shells_count
     ]##
-    var i = 0
+    var i = start - 1
     let new_shells = collect(OrderedTable):
         for s in model.shells.mvalues:
             i += 1
@@ -420,16 +428,21 @@ proc renumber_shells*(model: LSmodel) =
             {i: s}
     model.shells = new_shells
 
-proc renumber_nodes*(model: LSmodel) =
+proc renumber_elements*(model: LSmodel, start: int = 1) =
+    model.renumber_shells(start = start)
+    model.renumber_solids(start = start + model.shells.len)
+    model.renumber_solidsortho(start = start + model.shells.len + model.solids.len)
+
+proc renumber_nodes*(model: LSmodel, start: int = 1) =
     ##[
         renumber nodes 1..nodes_count
     ]##
-    var i = 0 
+    var i = start - 1
     let old_nodes_numbers = collect(newTable):
         for n in model.nodes.keys:
             i += 1
             {n: i}
-    i = 0
+    i = start - 1
     let new_nodes = collect(OrderedTable):
         for n in model.nodes.mvalues:
             i += 1
@@ -482,9 +495,34 @@ proc nearest_node*(model: LSmodel, node_number: int, node_group: IntSet): int =
                 dist = d
     return result
 
+func parts_numbers*(model: LSmodel): IntSet =
+    for e in model.shells.values:
+        result.incl(e.part)
+    for e in model.solids.values:
+        result.incl(e.part)
+    for e in model.solidsortho.values:
+        result.incl(e.part)
+
+func parts_volumes*(model: LSmodel): Table[int, float] = 
+    for e in model.solids.values:
+        if e.part notin result:
+            result[e.part] = 0
+        result[e.part] += e.volume
+    for e in model.solidsortho.values:
+        if e.part notin result:
+            result[e.part] = 0
+        result[e.part] += e.volume
+
+func elements_volumes*(model: LSmodel): Table[int, float] =
+    for e in model.solids.values:
+        result[e.n] = e.volume
+    for e in model.solidsortho.values:
+        result[e.n] = e.volume
 
 when isMainModule:
     var ls = LSmodel()
-    ls.nodes[1] = FEnode(n: 1, x: 1, y: 0, z: 0)
-    ls.rotate(axis=Point(x: 0, y: 0, z: 1), angle=90)
-    echo ls.nodes[1]
+    ls.readMesh("mesh.k")
+    echo ls.modelInfo()
+    ls.calculateElementVolumesParallel()
+    echo ls.parts_volumes
+    # m.translate(dx=10.0)

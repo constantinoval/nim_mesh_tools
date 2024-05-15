@@ -13,11 +13,11 @@ type
 proc set_tol*(self: Mesh, tol: float = 1e-6) {.exportpy.} =
     self.model.TOL = tol
 
-proc read*(self: Mesh, file_path: string) {.exportpy.} =
+proc read*(self: Mesh, file_path: string): bool {.exportpy discardable.} =
     ##[
         Чтение сетки из файла
     ]##
-    self.model.readMesh(file_path)
+    return self.model.readMesh(file_path)
 
 func nodescount*(self: Mesh): int {.exportpy.} =
     return self.model.nodes.len
@@ -40,17 +40,20 @@ proc save*(self: Mesh, file_path: string) {.exportpy.} =
 proc delete_unreferenced_nodes*(self: Mesh): int {.exportpy discardable.} =
     return self.model.delete_unreferenced_nodes()
 
-proc renumber_nodes*(self: Mesh) {.exportpy.} =
-    self.model.renumber_nodes()
+proc renumber_nodes*(self: Mesh, start: int = 1) {.exportpy.} =
+    self.model.renumber_nodes(start)
 
-proc renumber_shells*(self: Mesh) {.exportpy.} =
-    self.model.renumber_shells()
+proc renumber_shells*(self: Mesh, start: int = 1) {.exportpy.} =
+    self.model.renumber_shells(start)
 
-proc renumber_solids*(self: Mesh) {.exportpy.} =
-    self.model.renumber_solids()
+proc renumber_solids*(self: Mesh, start: int = 1) {.exportpy.} =
+    self.model.renumber_solids(start)
 
-proc renumber_solidsortho*(self: Mesh) {.exportpy.} =
-    self.model.renumber_solidsortho()
+proc renumber_solidsortho*(self: Mesh, start: int = 1) {.exportpy.} =
+    self.model.renumber_solidsortho(start)
+
+proc renumber_elements*(self: Mesh, start: int = 1) {.exportpy.} =
+    self.model.renumber_elements(start)
 
 proc determinate_bbox*(self: Mesh) {.exportpy.} =
     self.model.determinateBbox()
@@ -194,10 +197,21 @@ proc pairs_for_periodic_bc*(self: Mesh): Mesh_bc_data {.exportpy.} =
 proc info*(self: Mesh): string {.exportpy.} =
     return self.model.modelInfo
 
+func elements_volumes*(self: Mesh): Table[int, float] {.exportpy.} = 
+    return self.model.elements_volumes()
+
+func parts_volumes*(self: Mesh): Table[int, float] {.exportpy.} =
+    return self.model.parts_volumes()
+
+func parts_numbers*(self: Mesh): seq[int] {.exportpy.} =
+    return self.model.parts_numbers().toSeq
+
 when isMainModule:
     # var m = new(Mesh)
-    # echo "Reading..."
-    # m.read("./111.k")
+    # # # echo "Reading..."
+    # m.read("mesh.k")
+    # m.calculate_element_volumes(num_threads=2)
+    # echo m.parts_volumes
     # echo m.nodescount
     # echo "Clearing and renumbering..."
     # m.clear_and_renumber()
