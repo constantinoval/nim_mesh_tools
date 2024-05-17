@@ -8,6 +8,7 @@ import std/[os, memfiles, sugar, times, threadpool]
 import utils
 import std/streams
 import std/intsets
+import std/monotimes
 
 
 type
@@ -287,7 +288,7 @@ proc calculateElementVolumesParallel*(model: LSmodel, num_threads: int = 4) =
         spawn procOnePeace(element_refs[p.start].addr, p.length, model.addr)
     sync()
 
-proc save*(self: LSmodel, file_path: string) = 
+proc save1*(self: LSmodel, file_path: string) = 
     ##[
         save model to file file_path
         example: model.save("1.k")
@@ -309,6 +310,70 @@ proc save*(self: LSmodel, file_path: string) =
                 f.writeLine(e.formattedLine)
         f.writeLine("*END")
         f.close()
+
+proc save*(self: LSmodel, file_path: string) = 
+    ##[
+        save model to file file_path
+        example: model.save("1.k")
+    ]##
+    proc nodes_lines(model: LSmodel): string =
+        if model.nodes.len==0:
+            return ""
+        # var result = newStringOfCap(57*model.nodes.len)
+        for n in model.nodes.values:
+            result &= n.formattedLine & "\n"
+        result.setLen(result.len-1)
+        return result
+
+    proc solids_lines(model: LSmodel): string =
+        if model.solids.len==0:
+            return ""
+        # var result = newStringOfCap(81*model.nodes.len)
+        for e in model.solids.values:
+            result &= e.formattedLine & "\n"
+        result.setLen(result.len-1)
+        return result
+
+    proc solidsortho_lines(model: LSmodel): string =
+        if model.solidsortho.len==0:
+            return ""
+        # var result = newStringOfCap(81*model.nodes.len)
+        for e in model.solidsortho.values:
+            result &= e.formattedLine & "\n"
+        result.setLen(result.len-1)
+        return result
+
+    proc shells_lines(model: LSmodel): string =
+        if model.shells.len==0:
+            return ""
+        # var result = newStringOfCap(81*model.nodes.len)
+        for e in model.shells.values:
+            result &= e.formattedLine & "\n"
+        result.setLen(result.len-1)
+        return result
+
+    let f = newFileStream(file_path, fmWrite)
+    if not isNil(f):
+        let s_nodes = spawn nodes_lines(self)
+        let s_solids = spawn solids_lines(self)
+        let s_solidsortho = spawn solidsortho_lines(self)
+        let s_shells = spawn shells_lines(self)
+        f.writeLine("*KEYWORD")
+        if self.nodes.len != 0:
+            f.writeLine("*NODE")
+            f.writeLine(^s_nodes)
+        if self.solids.len != 0:
+            f.writeLine("*ELEMENT_SOLID")
+            f.writeLine(^s_solids)
+        if self.solidsortho.len != 0:
+            f.writeLine("*ELEMENT_SOLID_ORTHO")
+            f.writeLine(^s_solidsortho)    
+        if self.shells.len != 0:
+            f.writeLine("*ELEMENT_SHELL")
+            f.writeLine(^s_shells)    
+        f.writeLine("*END")
+        f.close()
+
 
 proc translate*(model: var LSmodel, dx: float = 0, dy: float = 0, dz: float = 0) =
     ##[
@@ -521,8 +586,16 @@ func elements_volumes*(model: LSmodel): Table[int, float] =
 
 when isMainModule:
     var ls = LSmodel()
-    ls.readMesh("mesh.k")
-    echo ls.modelInfo()
-    ls.calculateElementVolumesParallel()
-    echo ls.parts_volumes
+    ls.readMesh("big_mesh.k")
+    var t0 = getMonoTime()
+    ls.save("1.k")
+    echo getMonoTime()-t0
+    # echo ls.modelInfo()
+    ls.readMesh("big_mesh.k")
+    t0 = getMonoTime()
+    ls.save2("2.k")
+    echo getMonoTime()-t0
+    # echo ls.modelInfo()
+    # ls.calculateElementVolumesParallel()
+    # echo ls.parts_volumes
     # m.translate(dx=10.0)
