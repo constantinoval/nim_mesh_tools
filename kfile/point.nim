@@ -31,6 +31,10 @@ proc dot*(p1, p2: Point): float =
 proc coords*(p: Point): array[3, float] = 
     [p.x, p.y, p.z]
 
+# rounded coords
+proc coords_rounded*(p: Point, num_digits: int = 6): array[3, float] =
+    return [round(p.x, num_digits), round(p.y, num_digits), round(p.z, num_digits)]
+
 # point from seq
 proc fromSeq*[T](p: var Point, crds: openArray[T]) =
     p.x = float(crds[0])
@@ -92,21 +96,25 @@ proc volume4points*(points: openArray[Point]): float =
     matrix[3] = (points[3]-points[0]).coords
     result = abs(matrix.determinant/6.0)
 
+proc sort1d*(pnts: var openArray[Point]) =
+    discard
+
 when isMainModule:
-    var p1 = Point(x: 1, y: 0, z: 0)
+    var p1 = Point(x: 1.554523235235325, y: 0, z: 0)
     var p2 = Point(x: -1, y: 1, z: 0)
-    echo $(p1+p2)
-    echo($(p1*7))
-    echo(p1.dot(p2))
-    echo(-p1, p1.len)
-    echo(p1.cross(p2))
-    echo(p2.normalized)
-    echo(p2)
-    p2.normalize
-    echo($p2)
-    echo($(p1-p2))
-    echo(p1.angle(p2))
-    var p = Point()
-    p.fromSeq([1,1,1])
-    echo p
-    echo p1.dist(p2)
+    echo p1.coords_rounded(2)
+    # echo $(p1+p2)
+    # echo($(p1*7))
+    # echo(p1.dot(p2))
+    # echo(-p1, p1.len)
+    # echo(p1.cross(p2))
+    # echo(p2.normalized)
+    # echo(p2)
+    # p2.normalize
+    # echo($p2)
+    # echo($(p1-p2))
+    # echo(p1.angle(p2))
+    # var p = Point()
+    # p.fromSeq([1,1,1])
+    # echo p
+    # echo p1.dist(p2)

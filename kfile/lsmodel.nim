@@ -311,26 +311,57 @@ proc save1*(self: LSmodel, file_path: string) =
         f.writeLine("*END")
         f.close()
 
-proc save*(self: LSmodel, file_path: string) = 
+func format_nodes_refs(nds: ptr seq[ptr FEnode], start, stop: int): string =
+    for i in start..stop:
+        result &= nds[i][].formattedLine & "\n"
+
+func format_solids_refs(solids: ptr seq[ptr FEelement], start, stop: int): string =
+    for i in start..stop:
+        result &= solids[i][].formattedLine & "\n"
+
+proc save*(self: LSmodel, file_path: string, num_threads: int = 1) = 
     ##[
         save model to file file_path
         example: model.save("1.k")
     ]##
-    proc nodes_lines(model: LSmodel): string =
+    proc nodes_lines(model: LSmodel, num_threads: int = 1): string =
         if model.nodes.len==0:
             return ""
-        # var result = newStringOfCap(57*model.nodes.len)
-        for n in model.nodes.values:
-            result &= n.formattedLine & "\n"
+        if num_threads==1:
+            for n in model.nodes.values:
+                result &= n.formattedLine & "\n"
+        else:
+            let node_refs = collect:
+                for n in model.nodes.values:
+                    addr n
+            let peaces = splitSeq(node_refs.len, num_threads)
+            var results: seq[FlowVar[string]]
+            for p in peaces:
+                let r = spawn format_nodes_refs(addr node_refs, p.start, p.start+p.length-1)
+                results.add(r)
+            for r in results:
+                result &= ^r
         result.setLen(result.len-1)
         return result
 
-    proc solids_lines(model: LSmodel): string =
+    proc solids_lines(model: LSmodel, num_threads: int = 1): string =
         if model.solids.len==0:
             return ""
         # var result = newStringOfCap(81*model.nodes.len)
-        for e in model.solids.values:
-            result &= e.formattedLine & "\n"
+        if num_threads==1:
+            for e in model.solids.values:
+                result &= e.formattedLine & "\n"
+        else:
+            let solids_refs = collect:
+                for s in model.solids.values:
+                    addr s
+            let peaces = splitSeq(solids_refs.len, num_threads)
+            var results: seq[FlowVar[string]]
+            for p in peaces:
+                let r = spawn format_solids_refs(addr solids_refs, p.start, p.start+p.length-1)
+                results.add(r)
+            for r in results:
+                result &= ^r
         result.setLen(result.len-1)
         return result
 
@@ -354,8 +385,8 @@ proc save*(self: LSmodel, file_path: string) =
 
     let f = newFileStream(file_path, fmWrite)
     if not isNil(f):
-        let s_nodes = spawn nodes_lines(self)
-        let s_solids = spawn solids_lines(self)
+        let s_nodes = spawn nodes_lines(self, num_threads=num_threads)
+        let s_solids = spawn solids_lines(self, num_threads=num_threads)
         let s_solidsortho = spawn solidsortho_lines(self)
         let s_shells = spawn shells_lines(self)
         f.writeLine("*KEYWORD")
@@ -434,6 +465,8 @@ proc reflect*(model: var LSmodel, norm: int = 0) =
         let el = model.solids[num]
         var nodes = model.solids[num].nds
         for i, v in nodes.pairs:
+            if v==0:
+                break
             let n = model.nodes[v]
             let crd: float = case norm:
                 of 0: n.x
@@ -543,7 +576,7 @@ proc delete_unreferenced_nodes*(model: LSmodel): int {.discardable.} =
         model.nodes.del(n)
     return nodes_to_delete.len
 
-proc nearest_node*(model: LSmodel, node_number: int, node_group: IntSet): int =
+proc nearest_node*(model: LSmodel, node_number: int, node_group: ptr IntSet): int =
     ##[
         Find nearest to node_number node from set of node numbers: node_group
     ]##
@@ -552,9 +585,9 @@ proc nearest_node*(model: LSmodel, node_number: int, node_group: IntSet): int =
         return -1
     let n0 = model.nodes[node_number]
     var dist: float = float.high
-    for n in node_group:
+    for n in node_group[]:
         if n in model.nodes:
-            let d = model.nodes[n].dist(n0)
+            let d = model.nodes[n].dist2(n0)
             if d<dist:
                 result = n
                 dist = d
@@ -587,14 +620,14 @@ func elements_volumes*(model: LSmodel): Table[int, float] =
 when isMainModule:
     var ls = LSmodel()
     ls.readMesh("big_mesh.k")
+    echo ls.modelInfo()
     var t0 = getMonoTime()
-    ls.save("1.k")
-    echo getMonoTime()-t0
+    ls.save("1.k", num_threads=1)
+    echo "Parallel: ", getMonoTime()-t0
     # echo ls.modelInfo()
-    ls.readMesh("big_mesh.k")
     t0 = getMonoTime()
-    ls.save2("2.k")
-    echo getMonoTime()-t0
+    ls.save1("2.k")
+    echo "Serial:   ", getMonoTime()-t0
     # echo ls.modelInfo()
     # ls.calculateElementVolumesParallel()
     # echo ls.parts_volumes
