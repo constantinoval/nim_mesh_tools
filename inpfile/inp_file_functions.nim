@@ -246,7 +246,7 @@ proc fromFile(abaModel: AbaqusFEModelRef, fname: string) =
     abaModel.partElements = elements
     abaModel.transforms = transforms
 
-proc info(abaModel: AbaqusFEModelRef) = 
+proc info*(abaModel: AbaqusFEModelRef) = 
     var total_nodes: int
     var total_elements: int
     for k in abaModel[].partNodes.keys:
@@ -306,7 +306,7 @@ proc assemblyFromFile*(filename: string): AbaqusAssembly =
     abaModel.fromFile(filename)
     return assemblyFromAbaqusModel(abaModel)
 
-proc `$`(aa: AbaqusInstance): string =
+proc `$`*(aa: AbaqusInstance): string =
     return "Instance " & aa.name & " узлов: " & $aa.nodes.len & " элементов " & $aa.elements.len
 
 proc `$`*(aa: AbaqusAssembly): string =
@@ -334,7 +334,7 @@ if isMainModule:
     # echo it.transformPoint([1.0, 0, 0])
     var
         assembly: AbaqusAssembly
-    assembly = assemblyFromFile("./test.inp")
+    assembly = assemblyFromFile("./yap.inp")
     echo assembly
     # abaModel.info
     # echo abaModel[].transforms[]
