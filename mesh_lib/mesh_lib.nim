@@ -1,7 +1,12 @@
 import ../kfile/lsmodel
 import ../kfile/fenode
+<<<<<<< HEAD
 import std/[tables, sugar, intsets, sequtils, threadpool]
+=======
+import std/[tables, sugar, intsets, sequtils, threadpool, monotimes]
+>>>>>>> 879853e6600634edcd6eade5973e05dde2c9bb01
 import nimpy
+import std/monotimes
 
 const isparallel = false
 
@@ -40,10 +45,14 @@ proc save*(self: Mesh, file_path: string, num_threads: int = 2) {.exportpy.} =
     ##[
         Сохранение сетки в файл
     ]##
+<<<<<<< HEAD
     when isMainModule:
         self.model.save(file_path, num_threads)
     else:
         self.model.saveSerial(file_path)
+=======
+    self.model.save(file_path, num_threads)
+>>>>>>> 879853e6600634edcd6eade5973e05dde2c9bb01
 
 proc delete_unreferenced_nodes*(self: Mesh): int {.exportpy discardable.} =
     return self.model.delete_unreferenced_nodes()
@@ -94,8 +103,12 @@ proc translate*(self: Mesh, dx: float=0, dy: float=0, dz: float=0) {.exportpy.} 
     ]##
     self.model.translate(dx=dx, dy=dy, dz=dz)
 
+<<<<<<< HEAD
 ##[
 proc pairs_for_periodic_bc_old(self: Mesh): Mesh_bc_data =
+=======
+proc pairs_for_periodic_bc1(self: Mesh): Mesh_bc_data {.exportpy.} =
+>>>>>>> 879853e6600634edcd6eade5973e05dde2c9bb01
     ##[
         Поиск пар узлов для периодических граничных условий
     ]##
@@ -193,6 +206,139 @@ proc pairs_for_periodic_bc_old(self: Mesh): Mesh_bc_data =
         @[[B.toSeq[0], H.toSeq[0]]],
         @[[D.toSeq[0], F.toSeq[0]]],
         @[[E.toSeq[0], C.toSeq[0]]],
+<<<<<<< HEAD
+=======
+    ]
+
+proc pairs_for_periodic_bc*(self: Mesh): Mesh_bc_data {.exportpy.} =
+    ##[
+        Поиск пар узлов для периодических граничных условий
+    ]##
+    proc find_pairs_in_plain(
+            model: LSmodel,
+            nodes_set1: IntSet,
+            nodes_set2: IntSet,
+            plane: array[0..1, int],
+            rounded: int = 6
+        ): seq[array[2, int]] =
+        var ns1 = collect:
+            for n in nodes_set1:
+                model.nodes[n]
+        var ns2 = collect:
+            for n in nodes_set2:
+                model.nodes[n]
+        ns1.sort2d(rounded, plane)
+        ns2.sort2d(rounded, plane)
+        let n = min(ns1.len, ns2.len)
+        for i in 0..<n:
+            result.add([ns1[i].n, ns2[i].n])
+    
+    proc find_pairs_in_line(
+            model: LSmodel,
+            nodes_set1: IntSet,
+            nodes_set2: IntSet,
+            line: int,
+            rounded: int = 6
+        ): seq[array[2, int]] =
+        var ns1 = collect:
+            for n in nodes_set1:
+                model.nodes[n]
+        var ns2 = collect:
+            for n in nodes_set2:
+                model.nodes[n]
+        ns1.sort1d(rounded, line)
+        ns2.sort1d(rounded, line)
+        let n = min(ns1.len, ns2.len)
+        for i in 0..<n:
+            result.add([ns1[i].n, ns2[i].n])
+
+    var
+        # PLANES
+        # X normal
+        p_ABFE = self.model.planeXmin().toIntSet
+        p_DCGH = self.model.planeXmax().toIntSet
+
+        # Y-normal
+        p_ADHE = self.model.planeYmin().toIntSet
+        p_BCGF = self.model.planeYmax().toIntSet
+
+        # Z-normal
+        p_ABCD = self.model.planeZmin().toIntSet
+        p_HGFE  = self.model.planeZmax().toIntSet
+
+        # LINES
+        # X-parallel
+        l_AD = p_ADHE * p_ABCD
+        l_BC = p_BCGF * p_ABCD
+        l_EH = p_ADHE * p_HGFE
+        l_FG = p_BCGF * p_HGFE
+
+        # Y-parallel
+        l_AB = p_ABCD * p_ABFE
+        l_DC = p_ABCD * p_DCGH
+        l_EF = p_HGFE * p_ABFE
+        l_HG = p_HGFE * p_DCGH
+
+        # Z-parallel
+        l_AE = p_ABFE * p_ADHE
+        l_BF = p_ABFE * p_BCGF
+        l_DH = p_DCGH * p_ADHE
+        l_CG = p_DCGH * p_BCGF
+
+        # POINTS
+        A = l_AB * l_AD
+        B = l_AB * l_BC
+        C = l_DC * l_BC
+        D = l_AD * l_DC
+        E = l_EH * l_EF
+        F = l_EF * l_FG
+        G = l_HG * l_CG
+        H = l_EH * l_HG
+    # removing boundaries    
+    p_ABFE = p_ABFE - l_AB - l_EF - l_AE - l_BF
+    p_DCGH = p_DCGH - l_DC - l_HG - l_DH - l_CG
+    p_ADHE = p_ADHE - l_AD - l_EH - l_AE - l_DH
+    p_BCGF = p_BCGF - l_BC - l_FG - l_CG - l_BF
+    p_ABCD = p_ABCD - l_DC - l_AB - l_AD - l_BC
+    p_HGFE = p_HGFE - l_EF - l_HG - l_EH - l_FG
+    l_AD = l_AD - A - D
+    l_BC = l_BC - B - C
+    l_EH = l_EH - E - H
+    l_FG = l_FG - F - G
+    l_AB = l_AB - A - B
+    l_DC = l_DC - D - C
+    l_EF = l_EF - E - F
+    l_HG = l_HG - H - G
+    l_AE = l_AE - A - E
+    l_BF = l_BF - B - F
+    l_DH = l_DH - D - H
+    l_CG = l_CG - C - G
+
+    result.fixed = A.toSeq()[0]
+    result.dx = self.model.bbox.maxx-self.model.bbox.minx
+    result.dy = self.model.bbox.maxy-self.model.bbox.miny
+    result.dz = self.model.bbox.maxz-self.model.bbox.minz
+    let planex = spawn find_pairs_in_plain(self.model, p_ABFE, p_DCGH, plane=[1, 2])
+    let planey = spawn find_pairs_in_plain(self.model, p_ADHE, p_BCGF, plane=[0, 2])
+    let planez = spawn find_pairs_in_plain(self.model, p_ABCD, p_HGFE, plane=[0, 1])
+    let l1x = spawn find_pairs_in_line(self.model, l_AD, l_FG, line=0)
+    let l2x = spawn find_pairs_in_line(self.model, l_EH, l_BC, line=0)
+    let l1y = spawn find_pairs_in_line(self.model, l_AB, l_HG, line=1)
+    let l2y = spawn find_pairs_in_line(self.model, l_EF, l_DC, line=1)
+    let l1z = spawn find_pairs_in_line(self.model, l_AE, l_CG, line=2)
+    let l2z = spawn find_pairs_in_line(self.model, l_BF, l_DH, line=2)
+    result.pairs["planex"] = @[^planex]
+    result.pairs["planey"] = @[^planey]
+    result.pairs["planez"] = @[^planez]
+    result.pairs["linesx"] = @[^l1x, ^l2x]
+    result.pairs["linesy"] = @[^l1y, ^l2y]
+    result.pairs["linesz"] = @[^l1z, ^l2z]
+    result.pairs["points"] = @[
+        @[[A.toSeq[0], G.toSeq[0]]],
+        @[[B.toSeq[0], H.toSeq[0]]],
+        @[[D.toSeq[0], F.toSeq[0]]],
+        @[[E.toSeq[0], C.toSeq[0]]],
+>>>>>>> 879853e6600634edcd6eade5973e05dde2c9bb01
     ]
 ]##
 
