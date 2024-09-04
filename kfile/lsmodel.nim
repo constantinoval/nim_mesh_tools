@@ -357,42 +357,43 @@ proc saveSerial*(self: LSmodel, file_path: string) =
         f.writeLine("*END")
         f.close()
 
+proc nodes_lines(model: LSmodel): string {.gcsafe.} =
+    if model.nodes.len==0:
+        return ""
+    var s = newStringStream("")
+    for n in model.nodes.values:
+        s.writeLine(n.formattedLine)
+    return s.data
+
+proc solids_lines(model: LSmodel): string {.gcsafe.} =
+    if model.solids.len==0:
+        return ""
+    var s = newStringStream("")
+    for e in model.solids.values:
+        s.writeLine(e.formattedLine)
+    return s.data
+
+proc solidsortho_lines(model: LSmodel): string {.gcsafe.} =
+    if model.solidsortho.len==0:
+        return ""
+    var s = newStringStream("")
+    for e in model.solidsortho.values:
+        s.writeLine(e.formattedLine)
+    return s.data
+
+proc shells_lines(model: LSmodel): string {.gcsafe.} =
+    if model.shells.len==0:
+        return ""
+    var s = newStringStream("")
+    for e in model.shells.values:
+        s.writeLine(e.formattedLine)
+    return s.data
+
 proc saveParallel*(self: LSmodel, file_path: string) = 
     ##[
         save model to file file_path
         example: model.save("1.k")
     ]##
-    proc nodes_lines(model: LSmodel): string =
-        if model.nodes.len==0:
-            return ""
-        var s = newStringStream("")
-        for n in model.nodes.values:
-            s.writeLine(n.formattedLine)
-        return s.data
-
-    proc solids_lines(model: LSmodel): string =
-        if model.solids.len==0:
-            return ""
-        var s = newStringStream("")
-        for e in model.solids.values:
-            s.writeLine(e.formattedLine)
-        return s.data
-
-    proc solidsortho_lines(model: LSmodel): string =
-        if model.solidsortho.len==0:
-            return ""
-        var s = newStringStream("")
-        for e in model.solidsortho.values:
-            s.writeLine(e.formattedLine)
-        return s.data
-
-    proc shells_lines(model: LSmodel): string =
-        if model.shells.len==0:
-            return ""
-        var s = newStringStream("")
-        for e in model.shells.values:
-            s.writeLine(e.formattedLine)
-        return s.data
 
     let f = newFileStream(file_path, fmWrite)
     if not isNil(f):
@@ -400,21 +401,20 @@ proc saveParallel*(self: LSmodel, file_path: string) =
         let s_solids = spawn solids_lines(self)
         let s_solidsortho = spawn solidsortho_lines(self)
         let s_shells = spawn shells_lines(self)
-        sync()
         f.writeLine("*KEYWORD")
         if self.nodes.len != 0:
             f.writeLine("*NODE")
-            f.writeLine(^s_nodes)
+            f.write(^s_nodes)
         if self.solids.len != 0:
             f.writeLine("*ELEMENT_SOLID")
-            f.writeLine(^s_solids)
+            f.write(^s_solids)
         if self.solidsortho.len != 0:
             f.writeLine("*ELEMENT_SOLID_ORTHO")
-            f.writeLine(^s_solidsortho)    
+            f.write(^s_solidsortho)    
         if self.shells.len != 0:
             f.writeLine("*ELEMENT_SHELL")
-            f.writeLine(^s_shells)    
-        f.writeLine("*END")
+            f.write(^s_shells)    
+        f.write("*END")
         f.close()
 
 # func format_nodes_refs(nds: ptr seq[ptr FEnode], start, stop: int): string =
