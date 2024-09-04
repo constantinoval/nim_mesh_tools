@@ -101,7 +101,7 @@ class Mesh:
         """
         ...
  
-    def save(self, file_path: str, num_threads: int = 2) -> None:
+    def save(self, file_path: str) -> None:
         """
             Сохранение сеточной модели в файл file_path.
 
@@ -109,7 +109,6 @@ class Mesh:
             __________
             file_path: str
                 путь к файлу
-            num_threads: int = 2 - число параллельных потоков для форматирования данных
 
             Example
             _________

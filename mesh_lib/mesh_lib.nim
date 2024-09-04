@@ -37,12 +37,12 @@ func solidsorthocount*(self: Mesh): int {.exportpy.} =
 func shellscount*(self: Mesh): int {.exportpy.} =
     return self.model.shells.len
 
-proc save*(self: Mesh, file_path: string, num_threads: int = 2) {.exportpy.} =
+proc save*(self: Mesh, file_path: string) {.exportpy.} =
     ##[
         Сохранение сетки в файл
     ]##
-    when isMainModule:
-        self.model.save(file_path, num_threads)
+    when isparallel:
+        self.model.saveParallel(file_path)
     else:
         self.model.saveSerial(file_path)
 

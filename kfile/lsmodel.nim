@@ -357,84 +357,50 @@ proc saveSerial*(self: LSmodel, file_path: string) =
         f.writeLine("*END")
         f.close()
 
-func format_nodes_refs(nds: ptr seq[ptr FEnode], start, stop: int): string =
-    for i in start..stop:
-        result &= nds[i][].formattedLine & "\n"
-
-func format_solids_refs(solids: ptr seq[ptr FEelement], start, stop: int): string =
-    for i in start..stop:
-        result &= solids[i][].formattedLine & "\n"
-
-proc save*(self: LSmodel, file_path: string, num_threads: int = 1) = 
+proc saveParallel*(self: LSmodel, file_path: string) = 
     ##[
         save model to file file_path
         example: model.save("1.k")
     ]##
-    proc nodes_lines(model: LSmodel, num_threads: int = 1): string =
+    proc nodes_lines(model: LSmodel): string =
         if model.nodes.len==0:
             return ""
-        if num_threads==1:
-            for n in model.nodes.values:
-                result &= n.formattedLine & "\n"
-        else:
-            let node_refs = collect:
-                for n in model.nodes.values:
-                    addr n
-            let peaces = splitSeq(node_refs.len, num_threads)
-            var results: seq[FlowVar[string]]
-            for p in peaces:
-                let r = spawn format_nodes_refs(addr node_refs, p.start, p.start+p.length-1)
-                results.add(r)
-            for r in results:
-                result &= ^r
-        result.setLen(result.len-1)
-        return result
+        var s = newStringStream("")
+        for n in model.nodes.values:
+            s.writeLine(n.formattedLine)
+        return s.data
 
-    proc solids_lines(model: LSmodel, num_threads: int = 1): string =
+    proc solids_lines(model: LSmodel): string =
         if model.solids.len==0:
             return ""
-        # var result = newStringOfCap(81*model.nodes.len)
-        if num_threads==1:
-            for e in model.solids.values:
-                result &= e.formattedLine & "\n"
-        else:
-            let solids_refs = collect:
-                for s in model.solids.values:
-                    addr s
-            let peaces = splitSeq(solids_refs.len, num_threads)
-            var results: seq[FlowVar[string]]
-            for p in peaces:
-                let r = spawn format_solids_refs(addr solids_refs, p.start, p.start+p.length-1)
-                results.add(r)
-            for r in results:
-                result &= ^r
-        result.setLen(result.len-1)
-        return result
+        var s = newStringStream("")
+        for e in model.solids.values:
+            s.writeLine(e.formattedLine)
+        return s.data
 
     proc solidsortho_lines(model: LSmodel): string =
         if model.solidsortho.len==0:
             return ""
-        # var result = newStringOfCap(81*model.nodes.len)
+        var s = newStringStream("")
         for e in model.solidsortho.values:
-            result &= e.formattedLine & "\n"
-        result.setLen(result.len-1)
-        return result
+            s.writeLine(e.formattedLine)
+        return s.data
 
     proc shells_lines(model: LSmodel): string =
         if model.shells.len==0:
             return ""
-        # var result = newStringOfCap(81*model.nodes.len)
+        var s = newStringStream("")
         for e in model.shells.values:
-            result &= e.formattedLine & "\n"
-        result.setLen(result.len-1)
-        return result
+            s.writeLine(e.formattedLine)
+        return s.data
 
     let f = newFileStream(file_path, fmWrite)
     if not isNil(f):
-        let s_nodes = spawn nodes_lines(self, num_threads=num_threads)
-        let s_solids = spawn solids_lines(self, num_threads=num_threads)
+        let s_nodes = spawn nodes_lines(self)
+        let s_solids = spawn solids_lines(self)
         let s_solidsortho = spawn solidsortho_lines(self)
         let s_shells = spawn shells_lines(self)
+        sync()
         f.writeLine("*KEYWORD")
         if self.nodes.len != 0:
             f.writeLine("*NODE")
@@ -450,6 +416,100 @@ proc save*(self: LSmodel, file_path: string, num_threads: int = 1) =
             f.writeLine(^s_shells)    
         f.writeLine("*END")
         f.close()
+
+# func format_nodes_refs(nds: ptr seq[ptr FEnode], start, stop: int): string =
+#     for i in start..stop:
+#         result &= nds[i][].formattedLine & "\n"
+
+# func format_solids_refs(solids: ptr seq[ptr FEelement], start, stop: int): string =
+#     for i in start..stop:
+#         result &= solids[i][].formattedLine & "\n"
+
+# proc save*(self: LSmodel, file_path: string, num_threads: int = 1) = 
+#     ##[
+#         save model to file file_path
+#         example: model.save("1.k")
+#     ]##
+#     proc nodes_lines(model: LSmodel, num_threads: int = 1): string =
+#         if model.nodes.len==0:
+#             return ""
+#         if num_threads==1:
+#             for n in model.nodes.values:
+#                 result &= n.formattedLine & "\n"
+#         else:
+#             let node_refs = collect:
+#                 for n in model.nodes.values:
+#                     addr n
+#             let peaces = splitSeq(node_refs.len, num_threads)
+#             var results: seq[FlowVar[string]]
+#             for p in peaces:
+#                 let r = spawn format_nodes_refs(addr node_refs, p.start, p.start+p.length-1)
+#                 results.add(r)
+#             for r in results:
+#                 result &= ^r
+#         result.setLen(result.len-1)
+#         return result
+
+#     proc solids_lines(model: LSmodel, num_threads: int = 1): string =
+#         if model.solids.len==0:
+#             return ""
+#         # var result = newStringOfCap(81*model.nodes.len)
+#         if num_threads==1:
+#             for e in model.solids.values:
+#                 result &= e.formattedLine & "\n"
+#         else:
+#             let solids_refs = collect:
+#                 for s in model.solids.values:
+#                     addr s
+#             let peaces = splitSeq(solids_refs.len, num_threads)
+#             var results: seq[FlowVar[string]]
+#             for p in peaces:
+#                 let r = spawn format_solids_refs(addr solids_refs, p.start, p.start+p.length-1)
+#                 results.add(r)
+#             for r in results:
+#                 result &= ^r
+#         result.setLen(result.len-1)
+#         return result
+
+#     proc solidsortho_lines(model: LSmodel): string =
+#         if model.solidsortho.len==0:
+#             return ""
+#         # var result = newStringOfCap(81*model.nodes.len)
+#         for e in model.solidsortho.values:
+#             result &= e.formattedLine & "\n"
+#         result.setLen(result.len-1)
+#         return result
+
+#     proc shells_lines(model: LSmodel): string =
+#         if model.shells.len==0:
+#             return ""
+#         # var result = newStringOfCap(81*model.nodes.len)
+#         for e in model.shells.values:
+#             result &= e.formattedLine & "\n"
+#         result.setLen(result.len-1)
+#         return result
+
+#     let f = newFileStream(file_path, fmWrite)
+#     if not isNil(f):
+#         let s_nodes = spawn nodes_lines(self, num_threads=num_threads)
+#         let s_solids = spawn solids_lines(self, num_threads=num_threads)
+#         let s_solidsortho = spawn solidsortho_lines(self)
+#         let s_shells = spawn shells_lines(self)
+#         f.writeLine("*KEYWORD")
+#         if self.nodes.len != 0:
+#             f.writeLine("*NODE")
+#             f.writeLine(^s_nodes)
+#         if self.solids.len != 0:
+#             f.writeLine("*ELEMENT_SOLID")
+#             f.writeLine(^s_solids)
+#         if self.solidsortho.len != 0:
+#             f.writeLine("*ELEMENT_SOLID_ORTHO")
+#             f.writeLine(^s_solidsortho)    
+#         if self.shells.len != 0:
+#             f.writeLine("*ELEMENT_SHELL")
+#             f.writeLine(^s_shells)    
+#         f.writeLine("*END")
+#         f.close()
 
 
 proc translate*(model: var LSmodel, dx: float = 0, dy: float = 0, dz: float = 0) =
