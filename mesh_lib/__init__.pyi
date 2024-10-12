@@ -382,3 +382,18 @@ class Mesh:
             >>>     print(f"Часть с номером 1 есть в модели")
         """
         ...
+
+    def get_vtk_data(self) -> Tuple:
+        """
+            tuple[nodes: List[List[float]], parts: Dict[int, List[int]], cell_types: Dict[int, List[int]]]
+            Example
+            _______
+	    nodes, parts, cell_types = m.get_vtk_data()
+	    plotter = pv.Plotter()
+            mb = pv.MultiBlock()
+            for pn, p in parts.items():
+                mesh = pv.UnstructuredGrid(p, cell_types[pn], nodes)
+                mb.append(mesh)
+                plotter.add_mesh(mesh, show_edges=True)
+        """
+        ...

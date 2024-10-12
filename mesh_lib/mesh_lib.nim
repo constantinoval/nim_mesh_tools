@@ -2,15 +2,24 @@ import ../kfile/lsmodel
 import ../kfile/fenode
 import std/[tables, sugar, intsets, sequtils, threadpool]
 import nimpy
-import std/monotimes
+# import std/monotimes
 
-const isparallel = false
+const
+    isparallel = false
+    ##[
+        Типы ячеек для vtk по числу узлов:
+            8 -> 12 - гексаэдр
+            6 -> 13 - призма
+            4 -> 10 - тетраэдр 
+    ]##
+    CELL_TYPES = {8: 12, 6: 13, 4: 10}.toTable
 
 type
     Bbox* = tuple[minx: float, miny: float, minz: float, maxx: float, maxy: float, maxz: float]
     Mesh* = ref object of PyNimObjectExperimental
         model: LSmodel = LSmodel()
     Mesh_bc_data = tuple[fixed: int, dx, dy, dz: float, pairs: Table[string, seq[seq[array[2, int]]]]]
+    Vtk_data = tuple[nodes: seq[array[3, float]], parts: Table[int, seq[int]], cell_types: Table[int, seq[int]]]
 
 proc set_tol*(self: Mesh, tol: float = 1e-6) {.exportpy.} =
     self.model.TOL = tol
@@ -94,6 +103,30 @@ proc translate*(self: Mesh, dx: float=0, dy: float=0, dz: float=0) {.exportpy.} 
         Смещение модели на dx, dy, dz
     ]##
     self.model.translate(dx=dx, dy=dy, dz=dz)
+
+proc get_vtk_data*(self: Mesh): Vtk_data {.exportpy.} =
+    result.nodes = newSeqOfCap[array[3, float]](self.nodescount)
+    for n in self.model.nodes.values:
+        result.nodes.add([n.x, n.y, n.z])
+    for e in self.model.solids.values:
+        var e_record: seq[int]
+        if e.nodescount == 6:
+            e_record.add(6)
+            e_record.add(e.nds[1]-1)
+            e_record.add(e.nds[5]-1)
+            e_record.add(e.nds[2]-1)
+            e_record.add(e.nds[4]-1)
+            e_record.add(e.nds[6]-1)
+            e_record.add(e.nds[3]-1)
+        else:
+            e_record.add(e.nodescount)
+            for n in e.nds[1..e.nodescount]:
+                e_record.add(n-1)
+        if not result.parts.hasKey(e.part):
+            result.parts[e.part] = @[]
+            result.cell_types[e.part] = @[]
+        result.parts[e.part].add(e_record)
+        result.cell_types[e.part].add(CELL_TYPES[e.nodescount])
 
 ##[
 proc pairs_for_periodic_bc_old(self: Mesh): Mesh_bc_data =
@@ -476,7 +509,10 @@ func parts_numbers*(self: Mesh): seq[int] {.exportpy.} =
 
 when isMainModule:
     # var m = new(Mesh)
-    # m.read("yap.k")
+    # m.read("mesh.k")
+    # m.renumber_nodes
+    # m.renumber_elements
+    # echo m.get_vtk_data
     # m.reflect(0)
     # m.reflect(1)
     # m.determinate_bbox()

@@ -357,35 +357,35 @@ proc saveSerial*(self: LSmodel, file_path: string) =
         f.writeLine("*END")
         f.close()
 
-proc nodes_lines(model: LSmodel): string {.gcsafe.} =
-    if model.nodes.len==0:
+proc nodes_lines(nodes: ptr OrderedTable[int, FEnode]): string =
+    if nodes[].len==0:
         return ""
     var s = newStringStream("")
-    for n in model.nodes.values:
+    for n in nodes[].values:
         s.writeLine(n.formattedLine)
     return s.data
 
-proc solids_lines(model: LSmodel): string {.gcsafe.} =
-    if model.solids.len==0:
+proc solids_lines(solids: ptr OrderedTable[int, FEelement]): string=
+    if solids[].len==0:
         return ""
     var s = newStringStream("")
-    for e in model.solids.values:
+    for e in solids[].values:
         s.writeLine(e.formattedLine)
     return s.data
 
-proc solidsortho_lines(model: LSmodel): string {.gcsafe.} =
-    if model.solidsortho.len==0:
+proc solidsortho_lines(solidsortho: ptr OrderedTable[int, FEelement]): string =
+    if solidsortho[].len==0:
         return ""
     var s = newStringStream("")
-    for e in model.solidsortho.values:
+    for e in solidsortho[].values:
         s.writeLine(e.formattedLine)
     return s.data
 
-proc shells_lines(model: LSmodel): string {.gcsafe.} =
-    if model.shells.len==0:
+proc shells_lines(shells: ptr OrderedTable[int, FEelement]): string {.gcsafe.} =
+    if shells[].len==0:
         return ""
     var s = newStringStream("")
-    for e in model.shells.values:
+    for e in shells[].values:
         s.writeLine(e.formattedLine)
     return s.data
 
@@ -397,10 +397,10 @@ proc saveParallel*(self: LSmodel, file_path: string) =
 
     let f = newFileStream(file_path, fmWrite)
     if not isNil(f):
-        let s_nodes = spawn nodes_lines(self)
-        let s_solids = spawn solids_lines(self)
-        let s_solidsortho = spawn solidsortho_lines(self)
-        let s_shells = spawn shells_lines(self)
+        let s_nodes = spawn nodes_lines(addr self.nodes)
+        let s_solids = spawn solids_lines(addr self.solids)
+        let s_solidsortho = spawn solidsortho_lines(addr self.solidsortho)
+        let s_shells = spawn shells_lines(addr self.shells)
         f.writeLine("*KEYWORD")
         if self.nodes.len != 0:
             f.writeLine("*NODE")
@@ -707,6 +707,17 @@ func parts_numbers*(model: LSmodel): IntSet =
     for e in model.solidsortho.values:
         result.incl(e.part)
 
+func part_element_count*(model: LSmodel, part_number: int): int =
+    for e in model.shells.values:
+        if e.part==part_number:
+            result+=1
+    for e in model.solids.values:
+        if e.part==part_number:
+            result+=1
+    for e in model.solidsortho.values:
+        if e.part==part_number:
+            result+=1
+
 func parts_volumes*(model: LSmodel): Table[int, float] = 
     for e in model.solids.values:
         if e.part notin result:
@@ -723,17 +734,62 @@ func elements_volumes*(model: LSmodel): Table[int, float] =
     for e in model.solidsortho.values:
         result[e.n] = e.volume
 
+proc findUnconnectedRegions*(model: LSmodel, part: int): seq[IntSet] =
+    var
+        nodes, elements: seq[IntSet]
+        currentElementsCount: int
+    nodes = @[]
+    elements = @[]
+    let N = model.part_element_count(part)
+    let pr = max((N/20).int, 1)
+    echo ""
+    for el in model.solids.values():
+        if el.part!=part:
+            continue
+        var found: seq[int]
+        let ns = el.nds.toIntSet
+        for i, ns2 in nodes.pairs():
+            if not ns.disjoint(ns2):
+                found.add(i)
+        if found.len==0:
+            nodes.add(ns)
+            elements.add(@[el.n].toIntSet)
+        else:
+            let i0 = found[0]
+            nodes[i0] = ns.union(nodes[i0])
+            elements[i0].incl(el.n)
+            for j in countdown(found.len-1, 1):
+                let ij = found[j]
+                nodes[i0] = nodes[ij].union(nodes[i0])
+                elements[i0] = elements[ij].union(elements[i0])
+                nodes.del(ij)
+                elements.del(ij)
+        if (currentElementsCount>=pr) and (currentElementsCount mod pr)==0:
+            progress(currentElementsCount, N)    
+        currentElementsCount+=1
+    progress(N, N)
+    return elements
+
+
 when isMainModule:
     var ls = LSmodel()
-    ls.readMesh("big_mesh.k")
-    echo ls.modelInfo()
+    ls.readMesh("last_state_3D.k")
     var t0 = getMonoTime()
-    ls.save("1.k", num_threads=1)
-    echo "Parallel: ", getMonoTime()-t0
+    var total_number: int
+    for pn in ls.parts_numbers:
+        echo "Processing part number: ", pn
+        let regions = ls.findUnconnectedRegions(pn)
+        total_number += regions.len
+        echo regions[0].len
+    echo "Time left:   ", getMonoTime()-t0
+    echo "Total count: ", total_number
+    # echo regions
     # echo ls.modelInfo()
-    t0 = getMonoTime()
-    ls.save1("2.k")
-    echo "Serial:   ", getMonoTime()-t0
+    # ls.saveSerial("1.k")
+    # echo "Serial: ", getMonoTime()-t0
+    # # echo ls.modelInfo()
+    # t0 = getMonoTime()
+    # ls.saveParallel("2.k")
     # echo ls.modelInfo()
     # ls.calculateElementVolumesParallel()
     # echo ls.parts_volumes

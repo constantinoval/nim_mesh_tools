@@ -2,7 +2,7 @@ import kfile/lsmodel
 import std/monotimes
 
 var m = LSmodel()
-m.readMeshSerial("mesh1.k")
+m.readMeshSerial("big_test.k")
 echo m.modelInfo
 var t0 = getMonoTime()
 m.saveSerial("mesh_s.k")
